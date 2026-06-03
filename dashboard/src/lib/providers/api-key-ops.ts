@@ -119,12 +119,21 @@ export async function contributeKey(
       const rawData = getData[responseKey];
 
       if (rawData === null || (Array.isArray(rawData) && rawData.length === 0)) {
-        updatedPayload = [{ "api-key": trimmedKey }];
+        updatedPayload = [
+          provider === PROVIDER.CODEX
+            ? { "api-key": trimmedKey, "base-url": "https://api.openai.com" }
+            : { "api-key": trimmedKey },
+        ];
       } else if (!isApiKeyArray(rawData)) {
         await prisma.providerKeyOwnership.deleteMany({ where: { keyHash } });
         return { ok: false, error: `Invalid Management API response for ${provider}` };
       } else {
-        updatedPayload = [...rawData, { "api-key": trimmedKey }];
+        updatedPayload = [
+          ...rawData,
+          provider === PROVIDER.CODEX
+            ? { "api-key": trimmedKey, "base-url": "https://api.openai.com" }
+            : { "api-key": trimmedKey },
+        ];
       }
     }
 
