@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifySession } from "@/lib/auth/session";
 import { validateOrigin } from "@/lib/auth/origin";
-import { removeKey, removeKeyByAdmin } from "@/lib/providers/dual-write";
+import { removeKey, removeKeyByAdmin, updateKeyPriority } from "@/lib/providers/dual-write";
 import { prisma } from "@/lib/db";
 import { PROVIDER, type Provider } from "@/lib/providers/constants";
 import { AUDIT_ACTION, extractIpAddress, logAuditAsync } from "@/lib/audit";
@@ -77,5 +77,54 @@ export async function DELETE(
     return apiSuccess({});
   } catch (error) {
     return Errors.internal("Failed to remove provider key", error);
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ keyHash: string }> }
+) {
+  const session = await verifySession();
+  if (!session) {
+    return Errors.unauthorized();
+  }
+
+  const originError = validateOrigin(request);
+  if (originError) {
+    return originError;
+  }
+
+  try {
+    const { keyHash } = await params;
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const provider = typeof body?.provider === "string" ? body.provider : "";
+    const priority = typeof body?.priority === "number" ? body.priority : Number.NaN;
+
+    if (!keyHash || typeof keyHash !== "string") {
+      return Errors.missingFields(["keyHash"]);
+    }
+    if (!isValidProvider(provider)) {
+      return Errors.validation("Invalid provider");
+    }
+    if (!Number.isFinite(priority)) {
+      return Errors.validation("Request body must include 'priority' (number)");
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { isAdmin: true },
+    });
+    const isAdmin = user?.isAdmin ?? false;
+    const result = await updateKeyPriority(session.userId, keyHash, provider, Math.trunc(priority), isAdmin);
+
+    if (!result.ok) {
+      if (result.error?.includes("Access denied")) return Errors.forbidden();
+      if (result.error?.includes("not found")) return Errors.notFound("Provider key");
+      return Errors.internal("Failed to update provider key", result.error ? new Error(result.error) : undefined);
+    }
+
+    return apiSuccess({ priority: Math.trunc(priority) });
+  } catch (error) {
+    return Errors.internal("Failed to update provider key", error);
   }
 }

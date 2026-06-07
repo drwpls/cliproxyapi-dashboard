@@ -78,6 +78,7 @@ export interface KeyWithOwnership {
   keyHash: string;
   maskedKey: string;
   provider: string;
+  priority: number | null;
   ownerUsername: string | null;
   ownerUserId: string | null;
   isOwn: boolean;
@@ -101,6 +102,7 @@ export interface OAuthAccountWithOwnership {
   status: "active" | "error" | "disabled" | string;
   statusMessage: string | null;
   unavailable: boolean;
+  priority: number | null;
   quotaGroups?: OAuthAccountQuotaGroupState[];
 }
 
