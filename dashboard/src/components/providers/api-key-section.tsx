@@ -30,6 +30,7 @@ export interface KeyWithOwnership {
   keyHash: string;
   maskedKey: string;
   provider: string;
+  priority: number | null;
   ownerUsername: string | null;
   ownerUserId: string | null;
   isOwn: boolean;
@@ -119,6 +120,8 @@ export function ApiKeySection({
   const [saving, setSaving] = useState(false);
   const [showConfirmKeyDelete, setShowConfirmKeyDelete] = useState(false);
   const [pendingKeyDelete, setPendingKeyDelete] = useState<{ keyHash: string; provider: string } | null>(null);
+  const [priorityDrafts, setPriorityDrafts] = useState<Record<string, string>>({});
+  const [savingPriorityKey, setSavingPriorityKey] = useState<string | null>(null);
 
   const resetForm = () => {
     setApiKey("");
@@ -203,6 +206,28 @@ export function ApiKeySection({
     }
   };
 
+  const handlePriorityChange = async (keyHash: string, provider: string, priority: number) => {
+    setSavingPriorityKey(keyHash);
+    try {
+      const res = await fetch(`${API_ENDPOINTS.PROVIDERS.KEYS}/${keyHash}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, priority }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error?.message ?? data.error ?? t("toastPriorityUpdateFailed"), "error");
+        return;
+      }
+      showToast(t("toastPriorityUpdated"), "success");
+      await refreshProviders();
+    } catch {
+      showToast(t("toastNetworkError"), "error");
+    } finally {
+      setSavingPriorityKey(null);
+    }
+  };
+
   const providerStats = API_KEY_PROVIDERS.map((provider) => ({
     id: provider.id,
     count: configs[provider.id]?.keys.length ?? 0,
@@ -272,7 +297,36 @@ export function ApiKeySection({
                               <OwnerBadge ownerUsername={keyInfo.ownerUsername} isOwn={keyInfo.isOwn} />
                             )}
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center justify-end gap-3">
+                            {provider.id === PROVIDER_IDS.CODEX && currentUser && (keyInfo.isOwn || currentUser.isAdmin) && (
+                              <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                                <label htmlFor={`key-priority-${keyInfo.keyHash}`}>{t("priorityLabel")}</label>
+                                <Input
+                                  name={`key-priority-${keyInfo.keyHash}`}
+                                  type="number"
+                                  value={priorityDrafts[keyInfo.keyHash] ?? String(keyInfo.priority ?? 0)}
+                                  onChange={(value) => setPriorityDrafts((current) => ({ ...current, [keyInfo.keyHash]: value }))}
+                                  className="h-7 w-20 px-2 py-1 text-xs"
+                                />
+                                <Button
+                                  variant="secondary"
+                                  className="px-2 py-1 text-[11px]"
+                                  disabled={
+                                    savingPriorityKey === keyInfo.keyHash ||
+                                    Number.parseInt(priorityDrafts[keyInfo.keyHash] ?? String(keyInfo.priority ?? 0), 10) === (keyInfo.priority ?? 0)
+                                  }
+                                  onClick={() =>
+                                    handlePriorityChange(
+                                      keyInfo.keyHash,
+                                      provider.id,
+                                      Number.parseInt(priorityDrafts[keyInfo.keyHash] ?? String(keyInfo.priority ?? 0), 10)
+                                    )
+                                  }
+                                >
+                                  {savingPriorityKey === keyInfo.keyHash ? "..." : t("saveButton")}
+                                </Button>
+                              </div>
+                            )}
                             {currentUser && (
                               <span className="text-[11px] text-[var(--text-muted)]">{userKeyCount}/{maxKeysPerUser}</span>
                             )}

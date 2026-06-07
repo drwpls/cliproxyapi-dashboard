@@ -12,6 +12,7 @@ export {
   contributeKey,
   removeKey,
   removeKeyByAdmin,
+  updateKeyPriority,
   listKeysWithOwnership,
 } from "./api-key-ops";
 
@@ -23,6 +24,7 @@ export {
   removeOAuthAccount,
   removeOAuthAccountByIdOrName,
   toggleOAuthAccountByIdOrName,
+  updateOAuthAccountPriorityByIdOrName,
 } from "./oauth-ops";
 
 // Re-export types for consumers that need them

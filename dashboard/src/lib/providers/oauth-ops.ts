@@ -294,6 +294,7 @@ export async function listOAuthWithOwnership(
       status?: string;
       status_message?: string;
       unavailable?: boolean;
+      priority?: number | string | null;
     }>;
 
     const quotaGroupsByAuthId = new Map<string, OAuthAccountQuotaGroupState[]>();
@@ -382,6 +383,7 @@ export async function listOAuthWithOwnership(
          status: file.status || "active",
          statusMessage: file.status_message || null,
          unavailable: file.unavailable ?? false,
+         priority: normalizePriority(file.priority),
          quotaGroups: canSeeDetails ? quotaGroupsByAuthId.get(file.id) ?? [] : [],
        };
      });
@@ -433,6 +435,64 @@ export async function setOAuthQuotaGroupManualByAuthId(
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Unknown error updating quota group",
+    };
+  }
+}
+
+function normalizePriority(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+export async function updateOAuthAccountPriorityByIdOrName(
+  userId: string,
+  idOrName: string,
+  priority: number,
+  isAdmin: boolean
+): Promise<ToggleOAuthResult> {
+  if (!MANAGEMENT_API_KEY) {
+    return { ok: false, error: "Management API key not configured" };
+  }
+
+  try {
+    const resolved = await resolveOAuthAccountByIdOrName(idOrName);
+    if (!resolved.accountName) {
+      return { ok: false, error: "OAuth account not found" };
+    }
+    if (resolved.ownership) {
+      if (!isAdmin && resolved.ownership.userId !== userId) {
+        return { ok: false, error: "Access denied" };
+      }
+    } else if (!isAdmin) {
+      return { ok: false, error: "Access denied" };
+    }
+
+    const response = await fetchWithTimeout(`${MANAGEMENT_BASE_URL}/auth-files/fields`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MANAGEMENT_API_KEY}`,
+      },
+      body: JSON.stringify({ name: resolved.accountName, priority }),
+    });
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      await response.body?.cancel();
+      return { ok: false, error: `Failed to update OAuth priority: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ""}` };
+    }
+
+    invalidateUsageCaches();
+    invalidateProxyModelsCache();
+    return { ok: true };
+  } catch (error) {
+    logger.error({ err: error, idOrName, priority }, "updateOAuthAccountPriorityByIdOrName error");
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error updating OAuth priority",
     };
   }
 }
@@ -690,12 +750,12 @@ export async function toggleOAuthAccountByIdOrName(
       }
     }
 
-    const endpoint = `${MANAGEMENT_BASE_URL}/auth-files?name=${encodeURIComponent(resolved.accountName)}`;
+    const endpoint = `${MANAGEMENT_BASE_URL}/auth-files/status`;
 
-    let postRes: Response;
+    let patchRes: Response;
     try {
-      postRes = await fetchWithTimeout(endpoint, {
-        method: "POST",
+      patchRes = await fetchWithTimeout(endpoint, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${MANAGEMENT_API_KEY}`,
@@ -712,16 +772,16 @@ export async function toggleOAuthAccountByIdOrName(
           endpoint,
           accountName: resolved.accountName,
           timeoutMs: FETCH_TIMEOUT_MS,
-        }, "Fetch timeout - toggleOAuthAccountByIdOrName POST");
+        }, "Fetch timeout - toggleOAuthAccountByIdOrName PATCH");
         return { ok: false, error: "Request timeout toggling OAuth account" };
       }
       throw fetchError;
     }
 
-    if (!postRes.ok) {
-      const errorBody = await postRes.text().catch(() => "");
-      await postRes.body?.cancel();
-      return { ok: false, error: `Failed to toggle OAuth account: HTTP ${postRes.status}${errorBody ? ` - ${errorBody}` : ""}` };
+    if (!patchRes.ok) {
+      const errorBody = await patchRes.text().catch(() => "");
+      await patchRes.body?.cancel();
+      return { ok: false, error: `Failed to toggle OAuth account: HTTP ${patchRes.status}${errorBody ? ` - ${errorBody}` : ""}` };
     }
 
     return { ok: true, disabled };
