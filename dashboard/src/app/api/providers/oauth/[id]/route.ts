@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifySession } from "@/lib/auth/session";
 import { validateOrigin } from "@/lib/auth/origin";
-import { removeOAuthAccountByIdOrName, toggleOAuthAccountByIdOrName } from "@/lib/providers/dual-write";
+import { removeOAuthAccountByIdOrName, toggleOAuthAccountByIdOrName, updateOAuthAccountPriorityByIdOrName } from "@/lib/providers/dual-write";
 import { prisma } from "@/lib/db";
 import { Errors, apiSuccess } from "@/lib/errors";
 
@@ -72,9 +72,9 @@ export async function PATCH(
       return Errors.missingFields(["id"]);
     }
 
-    const body = await request.json().catch(() => null);
-    if (!body || typeof body.disabled !== "boolean") {
-      return Errors.validation("Request body must include 'disabled' (boolean)");
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body || (typeof body.disabled !== "boolean" && typeof body.priority !== "number")) {
+      return Errors.validation("Request body must include 'disabled' (boolean) or 'priority' (number)");
     }
 
     const user = await prisma.user.findUnique({
@@ -84,7 +84,9 @@ export async function PATCH(
 
     const isAdmin = user?.isAdmin ?? false;
 
-    const result = await toggleOAuthAccountByIdOrName(session.userId, id, body.disabled, isAdmin);
+    const result = typeof body.priority === "number"
+      ? await updateOAuthAccountPriorityByIdOrName(session.userId, id, Math.trunc(body.priority), isAdmin)
+      : await toggleOAuthAccountByIdOrName(session.userId, id, body.disabled as boolean, isAdmin);
 
     if (!result.ok) {
       if (result.error?.includes("Access denied")) {
@@ -96,7 +98,7 @@ export async function PATCH(
       return Errors.internal("Failed to toggle OAuth account", result.error ? new Error(result.error) : undefined);
     }
 
-    return apiSuccess({ disabled: result.disabled });
+    return apiSuccess(typeof body.priority === "number" ? { priority: Math.trunc(body.priority) } : { disabled: result.disabled });
   } catch (error) {
     return Errors.internal("Failed to toggle OAuth account", error);
   }

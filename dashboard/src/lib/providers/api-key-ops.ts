@@ -469,6 +469,91 @@ export async function removeKeyByAdmin(
   }
 }
 
+function priorityFromValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+export async function updateKeyPriority(
+  userId: string,
+  keyHash: string,
+  provider: Provider,
+  priority: number,
+  isAdmin: boolean
+): Promise<RemoveKeyResult> {
+  if (!MANAGEMENT_API_KEY) {
+    return { ok: false, error: "Management API key not configured" };
+  }
+  if (provider !== PROVIDER.CODEX) {
+    return { ok: false, error: "Priority editing is only supported for Codex keys" };
+  }
+
+  const ownership = await prisma.providerKeyOwnership.findUnique({ where: { keyHash } });
+  if (!ownership) {
+    return { ok: false, error: "Key not found" };
+  }
+  if (!isAdmin && ownership.userId !== userId) {
+    return { ok: false, error: "Access denied" };
+  }
+
+  const endpoint = `${MANAGEMENT_BASE_URL}${PROVIDER_ENDPOINT[provider]}`;
+  const release = await providerMutex.acquire(PROVIDER_ENDPOINT[provider]);
+  try {
+    const getRes = await fetchWithTimeout(endpoint, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${MANAGEMENT_API_KEY}` },
+    });
+    if (!getRes.ok) {
+      await getRes.body?.cancel();
+      return { ok: false, error: `Failed to fetch keys: HTTP ${getRes.status}` };
+    }
+
+    const getData = await getRes.json();
+    if (!isRecord(getData) || !Array.isArray(getData["codex-api-key"])) {
+      return { ok: false, error: "Invalid Management API response" };
+    }
+
+    const rawKeys = getData["codex-api-key"] as Array<Record<string, unknown>>;
+    const target = rawKeys.find((entry) => typeof entry["api-key"] === "string" && hashProviderKey(entry["api-key"]) === keyHash);
+    if (!target || typeof target["api-key"] !== "string") {
+      return { ok: false, error: "Key not found in Management API" };
+    }
+
+    const patchRes = await fetchWithTimeout(endpoint, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MANAGEMENT_API_KEY}`,
+      },
+      body: JSON.stringify({
+        match: target["api-key"],
+        value: { priority },
+      }),
+    });
+    if (!patchRes.ok) {
+      const errorBody = await patchRes.text().catch(() => "");
+      await patchRes.body?.cancel();
+      return { ok: false, error: `Failed to update priority: HTTP ${patchRes.status}${errorBody ? ` - ${errorBody}` : ""}` };
+    }
+
+    invalidateUsageCaches();
+    invalidateProxyModelsCache();
+    return { ok: true };
+  } catch (error) {
+    logger.error({ err: error, keyHash, provider, priority }, "updateKeyPriority error");
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error updating key priority",
+    };
+  } finally {
+    release();
+  }
+}
+
 export async function listKeysWithOwnership(
   userId: string,
   provider: Provider
@@ -513,7 +598,7 @@ export async function listKeysWithOwnership(
     }
 
     const rawKeys = getData[responseKey];
-    const apiKeys: string[] = [];
+    const apiKeyEntries: Array<{ key: string; priority: number | null }> = [];
 
     if (provider === PROVIDER.OPENAI_COMPAT) {
       if (rawKeys === null || (Array.isArray(rawKeys) && rawKeys.length === 0)) {
@@ -523,7 +608,7 @@ export async function listKeysWithOwnership(
       } else {
         for (const providerEntry of rawKeys) {
           for (const keyEntry of providerEntry["api-key-entries"]) {
-            apiKeys.push(keyEntry["api-key"]);
+            apiKeyEntries.push({ key: keyEntry["api-key"], priority: priorityFromValue((keyEntry as Record<string, unknown>).priority) });
           }
         }
       }
@@ -534,12 +619,12 @@ export async function listKeysWithOwnership(
         return { ok: false, error: `Invalid ${provider} response` };
       } else {
         for (const keyEntry of rawKeys) {
-          apiKeys.push(keyEntry["api-key"]);
+          apiKeyEntries.push({ key: keyEntry["api-key"], priority: priorityFromValue((keyEntry as Record<string, unknown>).priority) });
         }
       }
     }
 
-    const keyHashes = apiKeys.map((key) => hashProviderKey(key));
+    const keyHashes = apiKeyEntries.map((entry) => hashProviderKey(entry.key));
 
      const ownerships = await prisma.providerKeyOwnership.findMany({
         where: { keyHash: { in: keyHashes }, provider },
@@ -552,15 +637,16 @@ export async function listKeysWithOwnership(
 
     const ownershipMap = new Map(ownerships.map((o) => [o.keyHash, o]));
 
-      const keysWithOwnership: KeyWithOwnership[] = apiKeys.map((key, index) => {
-        const hash = hashProviderKey(key);
+      const keysWithOwnership: KeyWithOwnership[] = apiKeyEntries.map((entry, index) => {
+        const hash = hashProviderKey(entry.key);
         const ownership = ownershipMap.get(hash);
         const isOwn = ownership?.userId === userId;
 
         return {
           keyHash: hash,
-          maskedKey: isOwn ? maskProviderKey(key) : `Key ${index + 1}`,
+          maskedKey: isOwn ? maskProviderKey(entry.key) : `Key ${index + 1}`,
           provider,
+          priority: entry.priority,
           ownerUsername: isOwn ? ownership?.user.username || null : null,
           ownerUserId: isOwn ? ownership?.user.id || null : null,
           isOwn,

@@ -232,6 +232,7 @@ export function OAuthSection({
   const [showConfirmOAuthDelete, setShowConfirmOAuthDelete] = useState(false);
   const [pendingOAuthDelete, setPendingOAuthDelete] = useState<{ accountId: string; accountName: string } | null>(null);
   const [togglingAccountId, setTogglingAccountId] = useState<string | null>(null);
+  const [savingPriorityId, setSavingPriorityId] = useState<string | null>(null);
   const [claimingAccountName, setClaimingAccountName] = useState<string | null>(null);
   const [quotaActionKey, setQuotaActionKey] = useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -332,6 +333,29 @@ export function OAuthSection({
       showToast(t("toastNetworkError"), "error");
     } finally {
       setClaimingAccountName(null);
+    }
+  };
+
+  const updateOAuthPriority = async (accountId: string, priority: number) => {
+    setSavingPriorityId(accountId);
+    try {
+      const res = await fetch(`${API_ENDPOINTS.PROVIDERS.OAUTH}/${accountId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(extractApiError(data, t("toastPriorityUpdateFailed")), "error");
+        return;
+      }
+      showToast(t("toastPriorityUpdated"), "success");
+      await loadAccounts();
+      await refreshProviders();
+    } catch {
+      showToast(t("toastNetworkError"), "error");
+    } finally {
+      setSavingPriorityId(null);
     }
   };
 
@@ -987,6 +1011,8 @@ export function OAuthSection({
             onToggle={toggleOAuthAccount}
             onDelete={confirmDeleteOAuth}
             onClaim={claimOAuthAccount}
+            onPriorityChange={updateOAuthPriority}
+            savingPriorityId={savingPriorityId}
             onForceSuspend={(authId, groupId) => void updateQuotaGroupManual(authId, groupId, true)}
             onLiftManual={(authId, groupId) => void updateQuotaGroupManual(authId, groupId, false)}
             onClearCooldown={(authId, groupId) => void clearQuotaGroupCooldown(authId, groupId)}

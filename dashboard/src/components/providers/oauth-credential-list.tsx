@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { OwnerBadge, type CurrentUserLike } from "@/components/providers/api-key-section";
 
 interface OAuthQuotaGroupState {
@@ -31,6 +32,7 @@ interface OAuthAccountWithOwnership {
   status: "active" | "error" | "disabled" | string;
   statusMessage: string | null;
   unavailable: boolean;
+  priority: number | null;
   quotaGroups?: OAuthQuotaGroupState[];
 }
 
@@ -44,6 +46,8 @@ interface OAuthCredentialListProps {
   onToggle: (accountId: string, currentlyDisabled: boolean) => void;
   onDelete: (accountId: string) => void;
   onClaim: (accountName: string) => void;
+  onPriorityChange: (accountId: string, priority: number) => void;
+  savingPriorityId: string | null;
   onForceSuspend: (authId: string, groupId: string) => void;
   onLiftManual: (authId: string, groupId: string) => void;
   onClearCooldown: (authId: string, groupId: string) => void;
@@ -120,12 +124,15 @@ export function OAuthCredentialList({
   onToggle,
   onDelete,
   onClaim,
+  onPriorityChange,
+  savingPriorityId,
   onForceSuspend,
   onLiftManual,
   onClearCooldown,
 }: OAuthCredentialListProps) {
   const t = useTranslations("providers");
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
+  const [priorityDrafts, setPriorityDrafts] = useState<Record<string, string>>({});
 
   const toggleExpanded = (accountId: string) => {
     setExpandedAccounts((current) => ({ ...current, [accountId]: !current[accountId] }));
@@ -152,6 +159,12 @@ export function OAuthCredentialList({
         <div className="divide-y divide-[var(--surface-border)] rounded-md border border-[var(--surface-border)] bg-[var(--surface-base)]">
           {accounts.map((account) => (
             <div key={account.id} className="group p-3">
+              {(() => {
+                const canEdit = Boolean(currentUser && (account.isOwn || currentUser.isAdmin));
+                const draft = priorityDrafts[account.id] ?? String(account.priority ?? 0);
+                const parsedPriority = Number.parseInt(draft, 10);
+                const priorityChanged = Number.isFinite(parsedPriority) && parsedPriority !== (account.priority ?? 0);
+                return (
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -165,6 +178,26 @@ export function OAuthCredentialList({
                     <p className="truncate text-xs text-[var(--text-secondary)]">{account.accountEmail}</p>
                   )}
                   <p className="truncate text-xs font-mono text-[var(--text-muted)]">{account.accountName}</p>
+                  {(account.provider === "codex" || account.provider === "openai") && canEdit && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                      <label htmlFor={`oauth-priority-${account.id}`}>{t("priorityLabel")}</label>
+                      <Input
+                        name={`oauth-priority-${account.id}`}
+                        type="number"
+                        value={draft}
+                        onChange={(value) => setPriorityDrafts((current) => ({ ...current, [account.id]: value }))}
+                        className="h-7 w-20 px-2 py-1 text-xs"
+                      />
+                      <Button
+                        variant="secondary"
+                        className="px-2 py-1 text-[11px]"
+                        disabled={!priorityChanged || savingPriorityId === account.id}
+                        onClick={() => onPriorityChange(account.id, parsedPriority)}
+                      >
+                        {savingPriorityId === account.id ? "..." : t("saveButton")}
+                      </Button>
+                    </div>
+                  )}
                   {Array.isArray(account.quotaGroups) && account.quotaGroups.length > 0 && (
                     <button
                       type="button"
@@ -205,6 +238,8 @@ export function OAuthCredentialList({
                   </div>
                 )}
               </div>
+                );
+              })()}
               {expandedAccounts[account.id] && Array.isArray(account.quotaGroups) && account.quotaGroups.length > 0 && (
                 <div className="mt-3 space-y-2 rounded-md border border-[var(--surface-border)] bg-[var(--surface-muted)]/20 p-3">
                   {account.quotaGroups.map((group) => {
