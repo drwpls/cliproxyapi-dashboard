@@ -25,6 +25,7 @@ interface KeyUsage {
     totalTokens: number;
     inputTokens: number;
     outputTokens: number;
+    cachedTokens: number;
   }>;
 }
 
@@ -40,10 +41,12 @@ interface ModelCostEntry {
   provider: string;
   inputTokens: number;
   outputTokens: number;
+  cachedTokens: number;
   totalTokens: number;
   requests: number;
   estimatedCost: number;
   inputPer1M: number;
+  cachedInputPer1M: number | null;
   outputPer1M: number;
   priced: boolean;
 }
@@ -57,15 +60,16 @@ interface ProviderCostEntry {
 
 function buildCostBreakdown(keys: Record<string, KeyUsage>, customPricing: Record<string, ModelPrice>): ModelCostEntry[] {
   // Aggregate all models across all keys
-  const modelAgg: Record<string, { inputTokens: number; outputTokens: number; totalTokens: number; requests: number }> = {};
+  const modelAgg: Record<string, { inputTokens: number; outputTokens: number; cachedTokens: number; totalTokens: number; requests: number }> = {};
 
   for (const key of Object.values(keys)) {
     for (const [model, data] of Object.entries(key.models)) {
       if (!modelAgg[model]) {
-        modelAgg[model] = { inputTokens: 0, outputTokens: 0, totalTokens: 0, requests: 0 };
+        modelAgg[model] = { inputTokens: 0, outputTokens: 0, cachedTokens: 0, totalTokens: 0, requests: 0 };
       }
       modelAgg[model].inputTokens += data.inputTokens;
       modelAgg[model].outputTokens += data.outputTokens;
+      modelAgg[model].cachedTokens += data.cachedTokens;
       modelAgg[model].totalTokens += data.totalTokens;
       modelAgg[model].requests += data.totalRequests;
     }
@@ -74,17 +78,19 @@ function buildCostBreakdown(keys: Record<string, KeyUsage>, customPricing: Recor
   return Object.entries(modelAgg)
     .map(([model, data]) => {
       const price = resolveModelPrice(model, customPricing);
-      const estimatedCost = price ? calculateCost(data.inputTokens, data.outputTokens, price) : 0;
+      const estimatedCost = price ? calculateCost(data.inputTokens, data.outputTokens, data.cachedTokens, price) : 0;
       return {
         model,
         displayName: price?.displayName ?? model,
         provider: price?.provider ?? "Unknown",
         inputTokens: data.inputTokens,
         outputTokens: data.outputTokens,
+        cachedTokens: data.cachedTokens,
         totalTokens: data.totalTokens,
         requests: data.requests,
         estimatedCost,
         inputPer1M: price?.inputPer1M ?? 0,
+        cachedInputPer1M: price?.cachedInputPer1M ?? null,
         outputPer1M: price?.outputPer1M ?? 0,
         priced: price !== null,
       };
@@ -237,6 +243,7 @@ export function CostEstimation({ keys }: CostEstimationProps) {
                 <th className="px-3 py-2 text-left font-semibold text-[var(--text-muted)]">{t('providerHeader')}</th>
                 <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">{t('requestsHeader')}</th>
                 <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">{t('inputTokensHeader')}</th>
+                <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">{t('cachedTokensHeader')}</th>
                 <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">{t('outputTokensHeader')}</th>
                 <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">{t('rateHeader')}</th>
                 <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">{t('estCostHeader')}</th>
@@ -249,9 +256,10 @@ export function CostEstimation({ keys }: CostEstimationProps) {
                   <td className="px-3 py-2 text-[var(--text-muted)]">{entry.provider}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-[var(--text-secondary)]">{entry.requests.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-[var(--text-secondary)]">{formatCompact(entry.inputTokens)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[var(--text-secondary)]">{formatCompact(entry.cachedTokens)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-[var(--text-secondary)]">{formatCompact(entry.outputTokens)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-[var(--text-muted)]">
-                    {entry.priced ? `${entry.inputPer1M}/${entry.outputPer1M}` : "—"}
+                    {entry.priced ? `${entry.inputPer1M}/${entry.cachedInputPer1M ?? entry.inputPer1M}/${entry.outputPer1M}` : "—"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-700">{formatUSD(entry.estimatedCost)}</td>
                 </tr>
@@ -259,7 +267,7 @@ export function CostEstimation({ keys }: CostEstimationProps) {
               {unpricedModels.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={7} className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)] bg-[var(--surface-muted)]">
+                    <td colSpan={8} className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)] bg-[var(--surface-muted)]">
                       {t('unpricedModels')} ({unpricedModels.length})
                     </td>
                   </tr>
@@ -269,6 +277,7 @@ export function CostEstimation({ keys }: CostEstimationProps) {
                       <td className="px-3 py-1.5 text-[var(--text-muted)]">—</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-[var(--text-muted)]">{entry.requests.toLocaleString()}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-[var(--text-muted)]">{formatCompact(entry.inputTokens)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-[var(--text-muted)]">{formatCompact(entry.cachedTokens)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-[var(--text-muted)]">{formatCompact(entry.outputTokens)}</td>
                       <td className="px-3 py-1.5 text-right text-[var(--text-muted)]">—</td>
                       <td className="px-3 py-1.5 text-right text-[var(--text-muted)]">—</td>
@@ -279,7 +288,7 @@ export function CostEstimation({ keys }: CostEstimationProps) {
             </tbody>
             <tfoot>
               <tr className="border-t border-[var(--surface-border)] bg-[var(--surface-muted)]">
-                <td colSpan={6} className="px-3 py-2 font-semibold text-[var(--text-primary)]">{t('totalEstimatedCost')}</td>
+                <td colSpan={7} className="px-3 py-2 font-semibold text-[var(--text-primary)]">{t('totalEstimatedCost')}</td>
                 <td className="px-3 py-2 text-right font-bold text-emerald-700 text-sm">{formatUSD(totalEstimatedCost)}</td>
               </tr>
             </tfoot>

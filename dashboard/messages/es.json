@@ -859,6 +859,7 @@
     "providerHeader": "Proveedor",
     "requestsHeader": "Solicitudes",
     "inputTokensHeader": "Tokens de Entrada",
+    "cachedTokensHeader": "Tokens en Caché",
     "outputTokensHeader": "Tokens de Salida",
     "rateHeader": "Tarifa ($/1M)",
     "estCostHeader": "Coste Est.",

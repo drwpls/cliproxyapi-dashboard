@@ -14,6 +14,8 @@ export interface ModelPrice {
   displayName: string;
   /** USD per 1M input tokens */
   inputPer1M: number;
+  /** USD per 1M cached input tokens */
+  cachedInputPer1M?: number;
   /** USD per 1M output tokens */
   outputPer1M: number;
   /** Optional: provider grouping */
@@ -80,6 +82,46 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPrice> = {
     displayName: "GPT-5.2",
     inputPer1M: 2.5,
     outputPer1M: 10,
+    provider: "OpenAI",
+  },
+  "gpt-5.4": {
+    displayName: "GPT-5.4",
+    inputPer1M: 2.5,
+    cachedInputPer1M: 0.25,
+    outputPer1M: 15,
+    provider: "OpenAI",
+  },
+  "gpt-5.4-mini": {
+    displayName: "GPT-5.4 Mini",
+    inputPer1M: 0.75,
+    cachedInputPer1M: 0.075,
+    outputPer1M: 4.5,
+    provider: "OpenAI",
+  },
+  "gpt-5.4-nano": {
+    displayName: "GPT-5.4 Nano",
+    inputPer1M: 0.2,
+    cachedInputPer1M: 0.02,
+    outputPer1M: 1.25,
+    provider: "OpenAI",
+  },
+  "gpt-5.4-pro": {
+    displayName: "GPT-5.4 Pro",
+    inputPer1M: 30,
+    outputPer1M: 180,
+    provider: "OpenAI",
+  },
+  "gpt-5.5": {
+    displayName: "GPT-5.5",
+    inputPer1M: 5,
+    cachedInputPer1M: 0.5,
+    outputPer1M: 30,
+    provider: "OpenAI",
+  },
+  "gpt-5.5-pro": {
+    displayName: "GPT-5.5 Pro",
+    inputPer1M: 30,
+    outputPer1M: 180,
     provider: "OpenAI",
   },
   "o3": {
@@ -198,9 +240,14 @@ export function resolveModelPrice(model: string, customPricing?: Record<string, 
 export function calculateCost(
   inputTokens: number,
   outputTokens: number,
+  cachedInputTokens: number,
   price: ModelPrice
 ): number {
-  return (inputTokens / 1_000_000) * price.inputPer1M + (outputTokens / 1_000_000) * price.outputPer1M;
+  const cachedInputRate = price.cachedInputPer1M ?? price.inputPer1M;
+  const billableInputTokens = Math.max(0, inputTokens - cachedInputTokens);
+  return (billableInputTokens / 1_000_000) * price.inputPer1M
+    + (cachedInputTokens / 1_000_000) * cachedInputRate
+    + (outputTokens / 1_000_000) * price.outputPer1M;
 }
 
 /**

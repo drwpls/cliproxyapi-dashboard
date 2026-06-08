@@ -864,6 +864,7 @@
     "providerHeader": "Provider",
     "requestsHeader": "Requests",
     "inputTokensHeader": "Input Tokens",
+    "cachedTokensHeader": "Cached Tokens",
     "outputTokensHeader": "Output Tokens",
     "rateHeader": "Rate ($/1M)",
     "estCostHeader": "Est. Cost",

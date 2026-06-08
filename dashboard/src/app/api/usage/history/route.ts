@@ -29,6 +29,7 @@ interface KeyUsage {
     totalTokens: number;
     inputTokens: number;
     outputTokens: number;
+    cachedTokens: number;
   }>;
 }
 
@@ -208,7 +209,7 @@ export async function GET(request: NextRequest) {
   });
 
     const keyUsageMap: Record<string, KeyUsage> = {};
-    const dailyMap: Record<string, { requests: number; tokens: number; inputTokens: number; outputTokens: number; success: number; failure: number }> = {};
+    const dailyMap: Record<string, { requests: number; tokens: number; inputTokens: number; outputTokens: number; cachedTokens: number; success: number; failure: number }> = {};
     const modelTotalsMap: Record<string, { requests: number; tokens: number }> = {};
     const requestEvents: RequestEvent[] = [];
     const latencySeriesSeed: LatencyPoint[] = [];
@@ -265,12 +266,14 @@ export async function GET(request: NextRequest) {
           totalTokens: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cachedTokens: 0,
         };
       }
       keyUsage.models[modelName].totalRequests += 1;
       keyUsage.models[modelName].totalTokens += record.totalTokens;
       keyUsage.models[modelName].inputTokens += record.inputTokens;
       keyUsage.models[modelName].outputTokens += record.outputTokens;
+      keyUsage.models[modelName].cachedTokens += record.cachedTokens;
 
       // Daily aggregation for charts (use server local timezone, not UTC)
       const yr = record.timestamp.getFullYear();
@@ -278,12 +281,13 @@ export async function GET(request: NextRequest) {
       const dy = String(record.timestamp.getDate()).padStart(2, "0");
       const dayKey = `${yr}-${mo}-${dy}`;
       if (!dailyMap[dayKey]) {
-        dailyMap[dayKey] = { requests: 0, tokens: 0, inputTokens: 0, outputTokens: 0, success: 0, failure: 0 };
+        dailyMap[dayKey] = { requests: 0, tokens: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, success: 0, failure: 0 };
       }
       dailyMap[dayKey].requests += 1;
       dailyMap[dayKey].tokens += record.totalTokens;
       dailyMap[dayKey].inputTokens += record.inputTokens;
       dailyMap[dayKey].outputTokens += record.outputTokens;
+      dailyMap[dayKey].cachedTokens += record.cachedTokens;
       if (record.failed) {
         dailyMap[dayKey].failure += 1;
       } else {
