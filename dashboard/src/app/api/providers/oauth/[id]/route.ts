@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifySession } from "@/lib/auth/session";
 import { validateOrigin } from "@/lib/auth/origin";
-import { removeOAuthAccountByIdOrName, toggleOAuthAccountByIdOrName, updateOAuthAccountPriorityByIdOrName } from "@/lib/providers/dual-write";
+import { removeOAuthAccountByIdOrName, toggleOAuthAccountByIdOrName, updateOAuthAccountFieldsByIdOrName } from "@/lib/providers/dual-write";
 import { prisma } from "@/lib/db";
 import { Errors, apiSuccess } from "@/lib/errors";
 
@@ -73,8 +73,8 @@ export async function PATCH(
     }
 
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-    if (!body || (typeof body.disabled !== "boolean" && typeof body.priority !== "number")) {
-      return Errors.validation("Request body must include 'disabled' (boolean) or 'priority' (number)");
+    if (!body || (typeof body.disabled !== "boolean" && typeof body.priority !== "number" && typeof body.websockets !== "boolean")) {
+      return Errors.validation("Request body must include 'disabled' (boolean), 'priority' (number), or 'websockets' (boolean)");
     }
 
     const user = await prisma.user.findUnique({
@@ -84,8 +84,11 @@ export async function PATCH(
 
     const isAdmin = user?.isAdmin ?? false;
 
-    const result = typeof body.priority === "number"
-      ? await updateOAuthAccountPriorityByIdOrName(session.userId, id, Math.trunc(body.priority), isAdmin)
+    const result = typeof body.priority === "number" || typeof body.websockets === "boolean"
+      ? await updateOAuthAccountFieldsByIdOrName(session.userId, id, {
+          ...(typeof body.priority === "number" ? { priority: Math.trunc(body.priority) } : {}),
+          ...(typeof body.websockets === "boolean" ? { websockets: body.websockets } : {}),
+        }, isAdmin)
       : await toggleOAuthAccountByIdOrName(session.userId, id, body.disabled as boolean, isAdmin);
 
     if (!result.ok) {
@@ -98,7 +101,14 @@ export async function PATCH(
       return Errors.internal("Failed to toggle OAuth account", result.error ? new Error(result.error) : undefined);
     }
 
-    return apiSuccess(typeof body.priority === "number" ? { priority: Math.trunc(body.priority) } : { disabled: result.disabled });
+    return apiSuccess(
+      typeof body.priority === "number" || typeof body.websockets === "boolean"
+        ? {
+            ...(typeof body.priority === "number" ? { priority: Math.trunc(body.priority) } : {}),
+            ...(typeof body.websockets === "boolean" ? { websockets: body.websockets } : {}),
+          }
+        : { disabled: result.disabled }
+    );
   } catch (error) {
     return Errors.internal("Failed to toggle OAuth account", error);
   }
