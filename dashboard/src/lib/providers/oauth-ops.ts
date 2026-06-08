@@ -295,6 +295,7 @@ export async function listOAuthWithOwnership(
       status_message?: string;
       unavailable?: boolean;
       priority?: number | string | null;
+      websockets?: boolean | string | null;
     }>;
 
     const quotaGroupsByAuthId = new Map<string, OAuthAccountQuotaGroupState[]>();
@@ -384,6 +385,7 @@ export async function listOAuthWithOwnership(
          statusMessage: file.status_message || null,
          unavailable: file.unavailable ?? false,
          priority: normalizePriority(file.priority),
+         websockets: normalizeBool(file.websockets),
          quotaGroups: canSeeDetails ? quotaGroupsByAuthId.get(file.id) ?? [] : [],
        };
      });
@@ -448,14 +450,40 @@ function normalizePriority(value: unknown): number | null {
   return null;
 }
 
-export async function updateOAuthAccountPriorityByIdOrName(
+function normalizeBool(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return null;
+}
+
+interface OAuthAccountFieldsPatch {
+  priority?: number;
+  websockets?: boolean;
+}
+
+export async function updateOAuthAccountFieldsByIdOrName(
   userId: string,
   idOrName: string,
-  priority: number,
+  fields: OAuthAccountFieldsPatch,
   isAdmin: boolean
 ): Promise<ToggleOAuthResult> {
   if (!MANAGEMENT_API_KEY) {
     return { ok: false, error: "Management API key not configured" };
+  }
+
+  const bodyFields: OAuthAccountFieldsPatch = {};
+  if (typeof fields.priority === "number" && Number.isFinite(fields.priority)) {
+    bodyFields.priority = Math.trunc(fields.priority);
+  }
+  if (typeof fields.websockets === "boolean") {
+    bodyFields.websockets = fields.websockets;
+  }
+  if (typeof bodyFields.priority !== "number" && typeof bodyFields.websockets !== "boolean") {
+    return { ok: false, error: "No OAuth fields to update" };
   }
 
   try {
@@ -477,24 +505,33 @@ export async function updateOAuthAccountPriorityByIdOrName(
         "Content-Type": "application/json",
         Authorization: `Bearer ${MANAGEMENT_API_KEY}`,
       },
-      body: JSON.stringify({ name: resolved.accountName, priority }),
+      body: JSON.stringify({ name: resolved.accountName, ...bodyFields }),
     });
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "");
       await response.body?.cancel();
-      return { ok: false, error: `Failed to update OAuth priority: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ""}` };
+      return { ok: false, error: `Failed to update OAuth account fields: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ""}` };
     }
 
     invalidateUsageCaches();
     invalidateProxyModelsCache();
     return { ok: true };
   } catch (error) {
-    logger.error({ err: error, idOrName, priority }, "updateOAuthAccountPriorityByIdOrName error");
+    logger.error({ err: error, idOrName, fields: bodyFields }, "updateOAuthAccountFieldsByIdOrName error");
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Unknown error updating OAuth priority",
+      error: error instanceof Error ? error.message : "Unknown error updating OAuth account fields",
     };
   }
+}
+
+export async function updateOAuthAccountPriorityByIdOrName(
+  userId: string,
+  idOrName: string,
+  priority: number,
+  isAdmin: boolean
+): Promise<ToggleOAuthResult> {
+  return updateOAuthAccountFieldsByIdOrName(userId, idOrName, { priority }, isAdmin);
 }
 
 export async function clearOAuthQuotaGroupCooldownByAuthId(

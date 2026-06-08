@@ -336,20 +336,20 @@ export function OAuthSection({
     }
   };
 
-  const updateOAuthPriority = async (accountId: string, priority: number) => {
+  const updateOAuthPriority = async (accountId: string, priority: number, websockets: boolean) => {
     setSavingPriorityId(accountId);
     try {
       const res = await fetch(`${API_ENDPOINTS.PROVIDERS.OAUTH}/${accountId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priority }),
+        body: JSON.stringify({ priority, websockets }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(extractApiError(data, t("toastPriorityUpdateFailed")), "error");
+        showToast(extractApiError(data, t("toastOAuthSettingsUpdateFailed")), "error");
         return;
       }
-      showToast(t("toastPriorityUpdated"), "success");
+      showToast(t("toastOAuthSettingsUpdated"), "success");
       await loadAccounts();
       await refreshProviders();
     } catch {
