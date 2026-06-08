@@ -35,6 +35,7 @@ interface KeyUsage {
     totalTokens: number;
     inputTokens: number;
     outputTokens: number;
+    cachedTokens: number;
   }>;
 }
 
@@ -56,6 +57,7 @@ interface UsageData {
     tokens: number;
     inputTokens: number;
     outputTokens: number;
+    cachedTokens: number;
     success: number;
     failure: number;
   }>;
