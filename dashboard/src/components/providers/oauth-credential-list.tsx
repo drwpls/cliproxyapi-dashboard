@@ -33,6 +33,7 @@ interface OAuthAccountWithOwnership {
   statusMessage: string | null;
   unavailable: boolean;
   priority: number | null;
+  websockets: boolean | null;
   quotaGroups?: OAuthQuotaGroupState[];
 }
 
@@ -46,7 +47,7 @@ interface OAuthCredentialListProps {
   onToggle: (accountId: string, currentlyDisabled: boolean) => void;
   onDelete: (accountId: string) => void;
   onClaim: (accountName: string) => void;
-  onPriorityChange: (accountId: string, priority: number) => void;
+  onPriorityChange: (accountId: string, priority: number, websockets: boolean) => void;
   savingPriorityId: string | null;
   onForceSuspend: (authId: string, groupId: string) => void;
   onLiftManual: (authId: string, groupId: string) => void;
@@ -133,6 +134,7 @@ export function OAuthCredentialList({
   const t = useTranslations("providers");
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [priorityDrafts, setPriorityDrafts] = useState<Record<string, string>>({});
+  const [websocketDrafts, setWebsocketDrafts] = useState<Record<string, boolean>>({});
 
   const toggleExpanded = (accountId: string) => {
     setExpandedAccounts((current) => ({ ...current, [accountId]: !current[accountId] }));
@@ -163,7 +165,9 @@ export function OAuthCredentialList({
                 const canEdit = Boolean(currentUser && (account.isOwn || currentUser.isAdmin));
                 const draft = priorityDrafts[account.id] ?? String(account.priority ?? 0);
                 const parsedPriority = Number.parseInt(draft, 10);
+                const websocketDraft = websocketDrafts[account.id] ?? (account.websockets ?? false);
                 const priorityChanged = Number.isFinite(parsedPriority) && parsedPriority !== (account.priority ?? 0);
+                const websocketsChanged = websocketDraft !== (account.websockets ?? false);
                 return (
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-2">
@@ -188,11 +192,21 @@ export function OAuthCredentialList({
                         onChange={(value) => setPriorityDrafts((current) => ({ ...current, [account.id]: value }))}
                         className="h-7 w-20 px-2 py-1 text-xs"
                       />
+                      <label htmlFor={`oauth-websockets-${account.id}`} className="flex items-center gap-1">
+                        <input
+                          id={`oauth-websockets-${account.id}`}
+                          type="checkbox"
+                          checked={websocketDraft}
+                          onChange={(event) => setWebsocketDrafts((current) => ({ ...current, [account.id]: event.target.checked }))}
+                          className="size-3.5 rounded accent-blue-500"
+                        />
+                        {t("websocketsLabel")}
+                      </label>
                       <Button
                         variant="secondary"
                         className="px-2 py-1 text-[11px]"
-                        disabled={!priorityChanged || savingPriorityId === account.id}
-                        onClick={() => onPriorityChange(account.id, parsedPriority)}
+                        disabled={(!priorityChanged && !websocketsChanged) || !Number.isFinite(parsedPriority) || savingPriorityId === account.id}
+                        onClick={() => onPriorityChange(account.id, parsedPriority, websocketDraft)}
                       >
                         {savingPriorityId === account.id ? "..." : t("saveButton")}
                       </Button>

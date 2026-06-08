@@ -24,6 +24,7 @@ export {
   removeOAuthAccount,
   removeOAuthAccountByIdOrName,
   toggleOAuthAccountByIdOrName,
+  updateOAuthAccountFieldsByIdOrName,
   updateOAuthAccountPriorityByIdOrName,
 } from "./oauth-ops";
 

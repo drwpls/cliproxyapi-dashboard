@@ -103,6 +103,7 @@ export interface OAuthAccountWithOwnership {
   statusMessage: string | null;
   unavailable: boolean;
   priority: number | null;
+  websockets: boolean | null;
   quotaGroups?: OAuthAccountQuotaGroupState[];
 }
 
