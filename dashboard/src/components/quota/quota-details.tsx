@@ -13,6 +13,7 @@ import {
   isModelFirstAccountQuotaUnverified,
   normalizeFraction,
   summarizeModelFirstAccount,
+  type CodexSubscriptionInfo,
   type QuotaAccount,
   type QuotaGroup,
 } from "@/lib/model-first-monitoring";
@@ -36,6 +37,23 @@ function getCapacityBarClass(value: number): string {
   if (value > 0.6) return "bg-emerald-500/80";
   if (value > 0.2) return "bg-amber-500";
   return "bg-rose-500/80";
+}
+
+function formatSubscriptionDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+}
+
+function hasCodexSubscription(subscription: CodexSubscriptionInfo | null | undefined): subscription is CodexSubscriptionInfo {
+  if (!subscription) return false;
+  return Boolean(
+    subscription.activeUntil ||
+      subscription.planType ||
+      subscription.remainingDays !== null && subscription.remainingDays !== undefined ||
+      subscription.expired !== null && subscription.expired !== undefined
+  );
 }
 
 interface QuotaDetailsProps {
@@ -62,6 +80,21 @@ export function QuotaDetails({
   modelFirstOnlyView,
 }: QuotaDetailsProps) {
   const t = useTranslations("quota");
+
+  const formatCodexSubscriptionSummary = (subscription: CodexSubscriptionInfo | null | undefined): string | null => {
+    if (!hasCodexSubscription(subscription)) return null;
+    if (subscription.expired === true || (typeof subscription.remainingDays === "number" && subscription.remainingDays <= 0)) {
+      return t("codexSubscriptionExpired");
+    }
+    if (typeof subscription.remainingDays === "number") {
+      return t("codexSubscriptionDaysLeft", { count: subscription.remainingDays });
+    }
+    const expiryDate = formatSubscriptionDate(subscription.activeUntil);
+    if (expiryDate) {
+      return t("codexSubscriptionExpiresAt", { date: expiryDate });
+    }
+    return null;
+  };
 
   const sections = (() => {
     if (filteredAccounts.length === 0) {
@@ -160,6 +193,8 @@ export function QuotaDetails({
                         : accountQuotaUnverified
                           ? t("snapshotStatus")
                           : t("readyStatus");
+                  const codexSubscriptionSummary = formatCodexSubscriptionSummary(account.codexSubscription);
+                  const codexSubscriptionExpiry = formatSubscriptionDate(account.codexSubscription?.activeUntil);
 
                   return (
                     <div key={account.auth_index} className="border-b border-[var(--surface-border)] last:border-b-0">
@@ -174,7 +209,14 @@ export function QuotaDetails({
                         )}
                       >
                         <span className={cn("text-xs text-[var(--text-muted)] transition-transform", isRowExpanded && "rotate-180")}>⌄</span>
-                        <span className="truncate text-xs text-[var(--text-primary)]">{maskEmail(account.email, t("unknown"))}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs text-[var(--text-primary)]">{maskEmail(account.email, t("unknown"))}</span>
+                          {codexSubscriptionSummary && (
+                            <span className="mt-0.5 block truncate text-[10px] text-[var(--text-muted)]">
+                              {t("codexSubscriptionShortLabel")}: {codexSubscriptionSummary}
+                            </span>
+                          )}
+                        </span>
                         <span className="truncate text-xs capitalize text-[var(--text-secondary)]">{account.provider}</span>
                         <span
                           className={cn(
@@ -250,6 +292,20 @@ export function QuotaDetails({
                               <span>{t("snapshotStatusLabel")}: {accountSummary.staleSnapshot ? t("staleLabel") : t("freshLabel")}</span>
                               <span>{t("confidenceLabel")}: {accountQuotaUnverified ? t("snapshotOnlyLabel") : t("groupedReadyLabel")}</span>
                               <span>{t("readyGroupsLabel")}: {accountSummary.readyGroups}</span>
+                            </div>
+                          )}
+
+                          {hasCodexSubscription(account.codexSubscription) && (
+                            <div className="mb-2 flex flex-wrap gap-3 rounded-sm border border-[var(--surface-border)] bg-[var(--surface-muted)] px-3 py-2 text-[11px] text-[var(--text-muted)]">
+                              <span>
+                                {t("codexSubscriptionLabel")}: {codexSubscriptionSummary ?? t("unknown")}
+                              </span>
+                              {account.codexSubscription.planType && (
+                                <span>{t("codexSubscriptionPlanLabel")}: {account.codexSubscription.planType}</span>
+                              )}
+                              {codexSubscriptionExpiry && (
+                                <span>{t("codexSubscriptionExpiryLabel")}: {codexSubscriptionExpiry}</span>
+                              )}
                             </div>
                           )}
 
