@@ -9,6 +9,7 @@ import {
   enrichModelFirstGroup,
   isModelFirstProvider,
   type QuotaAccount,
+  type CodexSubscriptionInfo,
   type QuotaGroup,
   type QuotaResponse,
 } from "@/lib/model-first-monitoring";
@@ -29,6 +30,19 @@ interface AuthFile {
   label?: string;
   disabled: boolean;
   status: string;
+  plan_type?: string;
+  subscription_active_until?: string;
+  subscription_remaining_days?: number | string;
+  codex_subscription?: {
+    account_id?: string;
+    chatgpt_account_id?: string;
+    plan_type?: string;
+    subscription_active_until?: string;
+    chatgpt_subscription_active_until?: string;
+    subscription_remaining_days?: number | string;
+    subscription_expired?: boolean;
+    chatgpt_subscription_last_checked?: string;
+  };
 }
 
 interface AuthFilesResponse {
@@ -58,6 +72,68 @@ function isMeaningfulDisplayValue(value: string | undefined): value is string {
   }
 
   return normalized !== "unknown" && normalized !== "n/a" && normalized !== "none";
+}
+
+function normalizeStringValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeNumberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeBooleanValue(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return null;
+}
+
+function getCodexSubscriptionInfo(account: AuthFile): CodexSubscriptionInfo | null {
+  const nested = account.codex_subscription ?? {};
+  const activeUntil =
+    normalizeStringValue(account.subscription_active_until) ??
+    normalizeStringValue(nested.subscription_active_until) ??
+    normalizeStringValue(nested.chatgpt_subscription_active_until);
+  const remainingDays =
+    normalizeNumberValue(account.subscription_remaining_days) ??
+    normalizeNumberValue(nested.subscription_remaining_days);
+  const planType =
+    normalizeStringValue(account.plan_type) ?? normalizeStringValue(nested.plan_type);
+  const accountId =
+    normalizeStringValue(nested.account_id) ?? normalizeStringValue(nested.chatgpt_account_id);
+  const expired = normalizeBooleanValue(nested.subscription_expired);
+  const lastChecked = normalizeStringValue(nested.chatgpt_subscription_last_checked);
+
+  if (
+    activeUntil === null &&
+    remainingDays === null &&
+    planType === null &&
+    accountId === null &&
+    expired === null &&
+    lastChecked === null
+  ) {
+    return null;
+  }
+
+  return {
+    accountId,
+    planType,
+    activeUntil,
+    remainingDays,
+    expired,
+    lastChecked,
+  };
 }
 
 function inferProviderFromAuthFile(account: AuthFile): string | null {
@@ -1332,6 +1408,7 @@ export async function GET(request: NextRequest) {
 
       if (providerNorm === "codex") {
         const result = await fetchCodexQuota(authIndex);
+        const codexSubscription = getCodexSubscriptionInfo(account);
         
         if ("error" in result) {
           return {
@@ -1340,6 +1417,7 @@ export async function GET(request: NextRequest) {
             email: displayEmail,
             supported: true,
             error: result.error,
+            codexSubscription,
           };
         }
 
@@ -1349,6 +1427,7 @@ export async function GET(request: NextRequest) {
           email: displayEmail,
           supported: true,
           groups: result,
+          codexSubscription,
         };
       }
 
