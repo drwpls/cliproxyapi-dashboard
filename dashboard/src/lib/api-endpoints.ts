@@ -32,6 +32,10 @@ export const API_ENDPOINTS = {
     BASE: "/api/quota",
     CHECK_ALERTS: "/api/quota/check-alerts",
   },
+  CODEX: {
+    RESET_CREDITS: "/api/codex/reset-credits",
+    RESET_CREDITS_CONSUME: "/api/codex/reset-credits/consume",
+  },
   USAGE: {
     COLLECT: "/api/usage/collect",
     COLLECTION_STATUS: "/api/usage/collection-status",

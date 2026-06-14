@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 
 import { cn } from "@/lib/utils";
+import { CodexResetCreditsPanel } from "@/components/quota/codex-reset-credits-panel";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { isShortTermQuotaWindow } from "@/lib/quota-window-classification";
 import { canonicalizeQuotaProvider } from "@/lib/quota/query-state";
@@ -312,6 +313,11 @@ export function QuotaDetails({
                               <span>{t("confidenceLabel")}: {accountQuotaUnverified ? t("snapshotOnlyLabel") : t("groupedReadyLabel")}</span>
                               <span>{t("readyGroupsLabel")}: {accountSummary.readyGroups}</span>
                             </div>
+                          )}
+
+                          {(account.provider?.toLowerCase().includes("codex") ||
+                            hasCodexSubscription(account.codexSubscription)) && (
+                            <CodexResetCreditsPanel authIndex={account.auth_index} />
                           )}
 
                           {hasCodexSubscription(account.codexSubscription) && (
