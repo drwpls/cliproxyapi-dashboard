@@ -32,14 +32,12 @@ interface AuthFile {
   status: string;
   plan_type?: string;
   subscription_active_until?: string;
-  subscription_remaining_days?: number | string;
   codex_subscription?: {
     account_id?: string;
     chatgpt_account_id?: string;
     plan_type?: string;
     subscription_active_until?: string;
     chatgpt_subscription_active_until?: string;
-    subscription_remaining_days?: number | string;
     subscription_expired?: boolean;
     chatgpt_subscription_last_checked?: string;
   };
@@ -105,9 +103,6 @@ function getCodexSubscriptionInfo(account: AuthFile): CodexSubscriptionInfo | nu
     normalizeStringValue(account.subscription_active_until) ??
     normalizeStringValue(nested.subscription_active_until) ??
     normalizeStringValue(nested.chatgpt_subscription_active_until);
-  const remainingDays =
-    normalizeNumberValue(account.subscription_remaining_days) ??
-    normalizeNumberValue(nested.subscription_remaining_days);
   const planType =
     normalizeStringValue(account.plan_type) ?? normalizeStringValue(nested.plan_type);
   const accountId =
@@ -117,7 +112,6 @@ function getCodexSubscriptionInfo(account: AuthFile): CodexSubscriptionInfo | nu
 
   if (
     activeUntil === null &&
-    remainingDays === null &&
     planType === null &&
     accountId === null &&
     expired === null &&
@@ -130,7 +124,6 @@ function getCodexSubscriptionInfo(account: AuthFile): CodexSubscriptionInfo | nu
     accountId,
     planType,
     activeUntil,
-    remainingDays,
     expired,
     lastChecked,
   };

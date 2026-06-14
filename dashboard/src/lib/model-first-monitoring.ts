@@ -46,7 +46,6 @@ export interface CodexSubscriptionInfo {
   accountId?: string | null;
   planType?: string | null;
   activeUntil?: string | null;
-  remainingDays?: number | null;
   expired?: boolean | null;
   lastChecked?: string | null;
 }
