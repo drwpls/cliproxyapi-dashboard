@@ -46,12 +46,25 @@ function formatSubscriptionDate(value: string | null | undefined): string | null
   return date.toLocaleString();
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Compute remaining days live from the expiry date so the value stays accurate
+// as time passes, instead of relying on a duration the backend computed once and
+// cached statically. Mirrors the backend formula: ceil(diff / 1 day), floored at 0.
+function computeRemainingDaysFromExpiry(activeUntil: string | null | undefined): number | null {
+  if (!activeUntil) return null;
+  const expiry = new Date(activeUntil);
+  if (Number.isNaN(expiry.getTime())) return null;
+  const diffMs = expiry.getTime() - Date.now();
+  if (diffMs <= 0) return 0;
+  return Math.ceil(diffMs / MS_PER_DAY);
+}
+
 function hasCodexSubscription(subscription: CodexSubscriptionInfo | null | undefined): subscription is CodexSubscriptionInfo {
   if (!subscription) return false;
   return Boolean(
     subscription.activeUntil ||
       subscription.planType ||
-      subscription.remainingDays !== null && subscription.remainingDays !== undefined ||
       subscription.expired !== null && subscription.expired !== undefined
   );
 }
@@ -83,11 +96,17 @@ export function QuotaDetails({
 
   const formatCodexSubscriptionSummary = (subscription: CodexSubscriptionInfo | null | undefined): string | null => {
     if (!hasCodexSubscription(subscription)) return null;
-    if (subscription.expired === true || (typeof subscription.remainingDays === "number" && subscription.remainingDays <= 0)) {
+    const remainingDays = computeRemainingDaysFromExpiry(subscription.activeUntil);
+    // When we have a usable remaining-days value, trust it (it's derived live
+    // from the expiry date); only fall back to the static `expired` flag when we
+    // can't compute the remaining days at all.
+    const isExpired =
+      typeof remainingDays === "number" ? remainingDays <= 0 : subscription.expired === true;
+    if (isExpired) {
       return t("codexSubscriptionExpired");
     }
-    if (typeof subscription.remainingDays === "number") {
-      return t("codexSubscriptionDaysLeft", { count: subscription.remainingDays });
+    if (typeof remainingDays === "number") {
+      return t("codexSubscriptionDaysLeft", { count: remainingDays });
     }
     const expiryDate = formatSubscriptionDate(subscription.activeUntil);
     if (expiryDate) {
