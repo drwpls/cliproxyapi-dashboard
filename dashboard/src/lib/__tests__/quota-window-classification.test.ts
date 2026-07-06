@@ -13,6 +13,29 @@ describe("isShortTermQuotaWindow", () => {
     ).toBe(true);
   });
 
+  it("treats explicit long-term markers as long-term even with near reset times", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-05T20:54:00.000Z"));
+
+    const groups = [
+      {
+        id: "five-hour",
+        label: "5h Window",
+        resetTime: "2026-04-06T01:53:55.000Z",
+      },
+      {
+        id: "168h-window",
+        label: "168h Window",
+        resetTime: "2026-04-06T01:53:55.000Z",
+      },
+    ] as const;
+
+    expect(isShortTermQuotaWindow(groups[0], groups)).toBe(true);
+    expect(isShortTermQuotaWindow(groups[1], groups)).toBe(false);
+
+    vi.useRealTimers();
+  });
+
   it("classifies the earlier Antigravity reset cluster as short-term", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-05T20:54:00.000Z"));
