@@ -25,6 +25,24 @@ function hasExplicitShortTermMarker(group: QuotaWindowLike): boolean {
   );
 }
 
+function hasExplicitLongTermMarker(group: QuotaWindowLike): boolean {
+  const normalizedId = group.id.toLowerCase().replace(/[_\s-]+/g, "");
+  const normalizedLabel = group.label.toLowerCase().replace(/[_\s-]+/g, "");
+
+  return (
+    normalizedId.includes("168h") ||
+    normalizedId.includes("7d") ||
+    normalizedId.includes("sevenday") ||
+    normalizedId.includes("weekly") ||
+    normalizedId.includes("longterm") ||
+    normalizedLabel.includes("168h") ||
+    normalizedLabel.includes("7d") ||
+    normalizedLabel.includes("sevenday") ||
+    normalizedLabel.includes("weekly") ||
+    normalizedLabel.includes("longterm")
+  );
+}
+
 function parseResetTime(resetTime: string | null): number | null {
   if (!resetTime) return null;
 
@@ -38,6 +56,10 @@ export function isShortTermQuotaWindow(
 ): boolean {
   if (hasExplicitShortTermMarker(group)) {
     return true;
+  }
+
+  if (hasExplicitLongTermMarker(group)) {
+    return false;
   }
 
   const groupReset = parseResetTime(group.resetTime);
