@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -274,6 +274,7 @@ export default function QuotaPage() {
   const [quotaData, setQuotaData] = useState<QuotaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const requestSeq = useRef(0);
 
   const query = useMemo(() => parseQuotaQueryState(searchParams), [searchParams]);
 
@@ -283,18 +284,21 @@ export default function QuotaPage() {
   };
 
   const fetchQuota = async (signal?: AbortSignal, bust = false) => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     try {
       const url = bust ? `${API_ENDPOINTS.QUOTA.BASE}?bust=${Date.now()}` : API_ENDPOINTS.QUOTA.BASE;
       const response = await fetch(url, { signal });
       if (response.ok) {
         const data = (await response.json()) as QuotaResponse;
-        setQuotaData(data);
+        if (seq === requestSeq.current) {
+          setQuotaData(data);
+        }
       }
     } catch {
       if (signal?.aborted) return;
     } finally {
-      if (!signal?.aborted) setLoading(false);
+      if (!signal?.aborted && seq === requestSeq.current) setLoading(false);
     }
   };
 
