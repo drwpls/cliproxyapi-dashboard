@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { verifySession } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
-import { quotaCache, CACHE_TTL } from "@/lib/cache";
 import { Errors } from "@/lib/errors";
 import {
   ANTIGRAVITY_QUOTA_ENDPOINTS,
@@ -469,6 +468,7 @@ function formatWindowLabel(seconds: number): string {
 
 function parseCodexQuota(data: CodexWhamUsageResponse): QuotaGroup[] {
   const groups: QuotaGroup[] = [];
+  const nowMs = Date.now();
 
   const windows: Array<{ key: string; label: string; window: CodexRateWindow | undefined }> = [
     { key: "primary", label: "Primary", window: data.rate_limit?.primary_window },
@@ -478,11 +478,10 @@ function parseCodexQuota(data: CodexWhamUsageResponse): QuotaGroup[] {
   for (const { key, window } of windows) {
     if (!window || window.used_percent === undefined) continue;
 
-    const remainingFraction = remainingFromUtilization(window.used_percent);
-    if (remainingFraction === null) continue;
-    const resetTime = window.reset_at
-      ? new Date(window.reset_at * 1000).toISOString()
-      : null;
+    const resetMs = window.reset_at ? window.reset_at * 1000 : null;
+    const hasResetElapsed = resetMs !== null && resetMs <= nowMs;
+    const remainingFraction = hasResetElapsed ? 1 : Math.max(0, Math.min(1, 1 - window.used_percent / 100));
+    const resetTime = resetMs && !hasResetElapsed ? new Date(resetMs).toISOString() : null;
     const label = window.limit_window_seconds
       ? formatWindowLabel(window.limit_window_seconds)
       : `${key.charAt(0).toUpperCase() + key.slice(1)} Window`;
@@ -1293,16 +1292,6 @@ export async function GET(request: NextRequest) {
     return Errors.internal("Server configuration error");
   }
 
-  const CACHE_KEY = "quota:all";
-  const searchParams = new URL(request.url).searchParams;
-  const bypassCache = searchParams.has("bust") || searchParams.get("refresh") === "true";
-  if (!bypassCache) {
-    const cached = quotaCache.get(CACHE_KEY);
-    if (cached) {
-      return NextResponse.json(cached);
-    }
-  }
-
   try {
     const authFilesResponse = await fetch(
       `${CLIPROXYAPI_MANAGEMENT_URL}/auth-files`,
@@ -1512,8 +1501,6 @@ export async function GET(request: NextRequest) {
       accounts,
       generatedAt: new Date().toISOString(),
     };
-
-    quotaCache.set(CACHE_KEY, response, CACHE_TTL.QUOTA);
 
     return NextResponse.json(response);
   } catch (error) {
