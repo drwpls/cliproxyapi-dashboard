@@ -478,7 +478,8 @@ function parseCodexQuota(data: CodexWhamUsageResponse): QuotaGroup[] {
   for (const { key, window } of windows) {
     if (!window || window.used_percent === undefined) continue;
 
-    const remainingFraction = Math.max(0, Math.min(1, 1 - window.used_percent / 100));
+    const remainingFraction = remainingFromUtilization(window.used_percent);
+    if (remainingFraction === null) continue;
     const resetTime = window.reset_at
       ? new Date(window.reset_at * 1000).toISOString()
       : null;
@@ -942,6 +943,17 @@ function toFraction(remaining: string | null, limit: string | null): number {
   return Math.max(0, Math.min(1, remainingNum / limitNum));
 }
 
+function remainingFromUtilization(value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+
+  // Provider quota surfaces are inconsistent: some return fractional
+  // utilization (0.70), while older/other surfaces return percent utilization
+  // (70). Normalize both to a 0..1 used fraction before converting to
+  // remaining capacity.
+  const normalizedUtilization = value > 1 ? value / 100 : value;
+  return Math.max(0, Math.min(1, 1 - normalizedUtilization));
+}
+
 const USAGE_MAX_RETRIES = 2;
 const USAGE_RETRY_DELAY_MS = 1000;
 
@@ -1019,10 +1031,8 @@ async function fetchClaudeQuota(
             return;
           }
 
-          const remainingFraction = Math.max(
-            0,
-            Math.min(1, 1 - window.utilization / 100)
-          );
+          const remainingFraction = remainingFromUtilization(window.utilization);
+          if (remainingFraction === null) return;
 
           usageGroups.push({
             id,
@@ -1050,25 +1060,23 @@ async function fetchClaudeQuota(
           usageData.extra_usage.utilization !== undefined &&
           usageData.extra_usage.utilization !== null
         ) {
-          const remainingFraction = Math.max(
-            0,
-            Math.min(1, 1 - usageData.extra_usage.utilization / 100)
-          );
-
-          usageGroups.push({
-            id: "extra-usage",
-            label: "Extra Usage",
-            remainingFraction,
-            resetTime: null,
-            models: [
-              {
-                id: "extra-usage",
-                displayName: "Extra Usage",
-                remainingFraction,
-                resetTime: null,
-              },
-            ],
-          });
+          const remainingFraction = remainingFromUtilization(usageData.extra_usage.utilization);
+          if (remainingFraction !== null) {
+            usageGroups.push({
+              id: "extra-usage",
+              label: "Extra Usage",
+              remainingFraction,
+              resetTime: null,
+              models: [
+                {
+                  id: "extra-usage",
+                  displayName: "Extra Usage",
+                  remainingFraction,
+                  resetTime: null,
+                },
+              ],
+            });
+          }
         }
 
         if (usageGroups.length > 0) {
@@ -1162,7 +1170,8 @@ async function fetchClaudeQuota(
         const util = parseFloat(utilization);
         if (isNaN(util)) return;
 
-        const remainingFraction = Math.max(0, Math.min(1, 1 - util));
+        const remainingFraction = remainingFromUtilization(util);
+        if (remainingFraction === null) return;
         const resetTime = resetEpoch
           ? new Date(Number(resetEpoch) * 1000).toISOString()
           : null;
@@ -1285,9 +1294,13 @@ export async function GET(request: NextRequest) {
   }
 
   const CACHE_KEY = "quota:all";
-  const cached = quotaCache.get(CACHE_KEY);
-  if (cached) {
-    return NextResponse.json(cached);
+  const searchParams = new URL(request.url).searchParams;
+  const bypassCache = searchParams.has("bust") || searchParams.get("refresh") === "true";
+  if (!bypassCache) {
+    const cached = quotaCache.get(CACHE_KEY);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
   }
 
   try {
