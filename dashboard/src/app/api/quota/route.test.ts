@@ -1,15 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import type { QuotaGroup, QuotaModel } from "@/lib/model-first-monitoring";
-import { quotaCache } from "@/lib/cache";
 
 vi.mock("@/lib/auth/session", () => ({
   verifySession: vi.fn(() => ({ userId: "test-user" })),
-}));
-
-vi.mock("@/lib/cache", () => ({
-  quotaCache: { get: vi.fn(), set: vi.fn() },
-  CACHE_TTL: { QUOTA: 30_000 },
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -29,7 +23,6 @@ vi.stubEnv("CLIPROXYAPI_MANAGEMENT_URL", "http://test:8317/v0/management");
 describe("GET /api/quota - Gemini CLI support (issue #125)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(quotaCache.get).mockReturnValue(null);
   });
 
   it("returns supported: true for gemini-cli accounts", async () => {
@@ -564,7 +557,7 @@ describe("GET /api/quota - imported provider normalization", () => {
     expect(account.groups.length).toBeGreaterThan(0);
   });
 
-  it("normalizes Codex OAuth used_percent fractions into remaining fractions", async () => {
+  it("treats Codex OAuth used_percent as a 0-100 percentage", async () => {
     const authFilesResponse = {
       files: [
         {
@@ -579,8 +572,56 @@ describe("GET /api/quota - imported provider normalization", () => {
 
     const codexUsageResponse = {
       rate_limit: {
-        primary_window: { used_percent: 0.7, limit_window_seconds: 18_000, reset_at: 1_774_000_000 },
-        secondary_window: { used_percent: 0.68, limit_window_seconds: 604_800, reset_at: 1_774_086_400 },
+        primary_window: { used_percent: 0.7, limit_window_seconds: 18_000, reset_at: 2_000_000_000 },
+        secondary_window: { used_percent: 0.68, limit_window_seconds: 604_800, reset_at: 2_000_086_400 },
+      },
+    };
+
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(authFilesResponse),
+        body: { cancel: vi.fn() },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status_code: 200, body: codexUsageResponse }),
+        body: { cancel: vi.fn() },
+      });
+
+    const { GET } = await import("./route");
+
+    const request = new Request("http://localhost/api/quota", {
+      headers: { cookie: "session=test" },
+    });
+    const response = await GET(request as NextRequest);
+    const data = await response.json();
+
+    const account = data.accounts[0];
+    const primary = account.groups.find((group: QuotaGroup) => group.id === "primary-window");
+    const secondary = account.groups.find((group: QuotaGroup) => group.id === "secondary-window");
+
+    expect(primary?.remainingFraction).toBeCloseTo(0.993, 5);
+    expect(secondary?.remainingFraction).toBeCloseTo(0.9932, 5);
+  });
+
+  it("normalizes Codex OAuth used_percent percentages into remaining fractions", async () => {
+    const authFilesResponse = {
+      files: [
+        {
+          auth_index: 0,
+          provider: "codex",
+          email: "user@openai.com",
+          disabled: false,
+          status: "active",
+        },
+      ],
+    };
+
+    const codexUsageResponse = {
+      rate_limit: {
+        primary_window: { used_percent: 70, limit_window_seconds: 18_000, reset_at: 2_000_000_000 },
+        secondary_window: { used_percent: 68, limit_window_seconds: 604_800, reset_at: 2_000_086_400 },
       },
     };
 
@@ -612,7 +653,7 @@ describe("GET /api/quota - imported provider normalization", () => {
     expect(secondary?.remainingFraction).toBeCloseTo(0.32, 5);
   });
 
-  it("normalizes Codex OAuth used_percent percentages into the same remaining fractions", async () => {
+  it("treats elapsed Codex reset windows as full again", async () => {
     const authFilesResponse = {
       files: [
         {
@@ -627,8 +668,8 @@ describe("GET /api/quota - imported provider normalization", () => {
 
     const codexUsageResponse = {
       rate_limit: {
-        primary_window: { used_percent: 70, limit_window_seconds: 18_000, reset_at: 1_774_000_000 },
-        secondary_window: { used_percent: 68, limit_window_seconds: 604_800, reset_at: 1_774_086_400 },
+        primary_window: { used_percent: 100, limit_window_seconds: 18_000, reset_at: 1_774_000_000 },
+        secondary_window: { used_percent: 42, limit_window_seconds: 604_800, reset_at: 2_000_086_400 },
       },
     };
 
@@ -656,8 +697,9 @@ describe("GET /api/quota - imported provider normalization", () => {
     const primary = account.groups.find((group: QuotaGroup) => group.id === "primary-window");
     const secondary = account.groups.find((group: QuotaGroup) => group.id === "secondary-window");
 
-    expect(primary?.remainingFraction).toBeCloseTo(0.3, 5);
-    expect(secondary?.remainingFraction).toBeCloseTo(0.32, 5);
+    expect(primary?.remainingFraction).toBe(1);
+    expect(primary?.resetTime).toBeNull();
+    expect(secondary?.remainingFraction).toBeCloseTo(0.58, 5);
   });
 
   it("normalizes Claude OAuth utilization fractions into remaining fractions", async () => {
@@ -754,22 +796,7 @@ describe("GET /api/quota - imported provider normalization", () => {
     expect(sevenDayModel?.remainingFraction).toBeCloseTo(0.32, 5);
   });
 
-  it("bypasses quota cache when bust is set and still fetches auth files", async () => {
-    const staleResponse = {
-      accounts: [
-        {
-          auth_index: "cached",
-          provider: "cached",
-          email: "cached@example.com",
-          supported: true,
-          groups: [],
-        },
-      ],
-      generatedAt: "2026-03-01T00:00:00Z",
-    };
-
-    vi.mocked(quotaCache.get).mockReturnValueOnce(staleResponse);
-
+  it("fetches auth files when bust is set", async () => {
     const authFilesResponse = {
       files: [
         {
@@ -796,7 +823,6 @@ describe("GET /api/quota - imported provider normalization", () => {
     const response = await GET(request as NextRequest);
     const data = await response.json();
 
-    expect(quotaCache.get).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(data.accounts).toHaveLength(1);
     expect(data.accounts[0].email).toBe("fresh@example.com");
