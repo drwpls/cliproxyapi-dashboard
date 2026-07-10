@@ -24,7 +24,7 @@ export interface ModelPrice {
 
 /**
  * Built-in pricing table.  Keep alphabetically sorted by key.
- * Source: official pricing pages as of April 2026.
+ * Source: official pricing pages as of July 2026.
  */
 export const DEFAULT_MODEL_PRICING: Record<string, ModelPrice> = {
   // ── Anthropic ──────────────────────────────────────────────
@@ -122,6 +122,34 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPrice> = {
     displayName: "GPT-5.5 Pro",
     inputPer1M: 30,
     outputPer1M: 180,
+    provider: "OpenAI",
+  },
+  "gpt-5.6": {
+    displayName: "GPT-5.6",
+    inputPer1M: 5,
+    cachedInputPer1M: 0.5,
+    outputPer1M: 30,
+    provider: "OpenAI",
+  },
+  "gpt-5.6-luna": {
+    displayName: "GPT-5.6 Luna",
+    inputPer1M: 1,
+    cachedInputPer1M: 0.1,
+    outputPer1M: 6,
+    provider: "OpenAI",
+  },
+  "gpt-5.6-sol": {
+    displayName: "GPT-5.6 Sol",
+    inputPer1M: 5,
+    cachedInputPer1M: 0.5,
+    outputPer1M: 30,
+    provider: "OpenAI",
+  },
+  "gpt-5.6-terra": {
+    displayName: "GPT-5.6 Terra",
+    inputPer1M: 2.5,
+    cachedInputPer1M: 0.25,
+    outputPer1M: 15,
     provider: "OpenAI",
   },
   "o3": {
