@@ -61,14 +61,6 @@ const MOCK_NOTIFICATIONS: Notification[] = [
     link: "/dashboard/settings",
     timestamp: Date.now(),
   },
-  {
-    id: "mock-update-dashboard",
-    type: "info",
-    title: "Dashboard Update Available",
-    message: "v0.9.0 → v1.0.0",
-    link: "/dashboard/settings",
-    timestamp: Date.now(),
-  },
 ];
 
 const silentFetcher = (url: string) =>
@@ -103,18 +95,12 @@ export function useHeaderNotifications(isAdmin: boolean, userId: string) {
     { refreshInterval: 5 * 60_000, dedupingInterval: 30_000, revalidateOnFocus: false }
   );
 
-  const { data: dashUpdateData } = useSWR<UpdateCheckResult>(
-    debug || !isAdmin ? null : API_ENDPOINTS.UPDATE.DASHBOARD_CHECK,
-    silentFetcher,
-    { refreshInterval: 5 * 60_000, dedupingInterval: 30_000, revalidateOnFocus: false }
-  );
-
   const notifications = useMemo<Notification[]>(() => {
     if (debug) return MOCK_NOTIFICATIONS;
 
-    const raw = buildNotifications(healthData, quotaData, proxyUpdateData, dashUpdateData, t as unknown as TranslationFn);
+    const raw = buildNotifications(healthData, quotaData, proxyUpdateData, t as unknown as TranslationFn);
     return filterNotifications(raw, dismissedIds);
-  }, [debug, t, healthData, quotaData, proxyUpdateData, dashUpdateData, dismissedIds]);
+  }, [debug, t, healthData, quotaData, proxyUpdateData, dismissedIds]);
 
   const criticalCount = notifications.filter((n) => n.type === "critical").length;
   const totalCount = notifications.length;

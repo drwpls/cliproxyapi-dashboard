@@ -66,9 +66,6 @@ export default function SettingsPage() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [availableApiKeys, setAvailableApiKeys] = useState<AvailableApiKey[]>([]);
 
-  const [showConfirmProxyUpdate, setShowConfirmProxyUpdate] = useState(false);
-  const [pendingProxyVersion, setPendingProxyVersion] = useState<string>("latest");
-  const [showConfirmDashboardUpdate, setShowConfirmDashboardUpdate] = useState(false);
   const [showConfirmDeleteToken, setShowConfirmDeleteToken] = useState(false);
   const [pendingDeleteTokenId, setPendingDeleteTokenId] = useState<string | null>(null);
   const [showConfirmRevokeSessions, setShowConfirmRevokeSessions] = useState(false);
@@ -166,11 +163,6 @@ export default function SettingsPage() {
     return () => controller.abort();
   }, [fetchProxyUpdateInfo, fetchDashboardUpdateInfo, fetchSyncTokens]);
 
-  const confirmProxyUpdate = (version: string = "latest") => {
-    setPendingProxyVersion(version);
-    setShowConfirmProxyUpdate(true);
-  };
-
   const handleRefreshDashboardUpdate = useCallback(() => {
     fetchDashboardUpdateInfo(undefined, true);
   }, [fetchDashboardUpdateInfo]);
@@ -179,8 +171,7 @@ export default function SettingsPage() {
     fetchProxyUpdateInfo(undefined, true);
   }, [fetchProxyUpdateInfo]);
 
-  const handleProxyUpdate = async () => {
-    const version = pendingProxyVersion;
+  const handleProxyUpdate = async (version: string = "latest") => {
     setProxyUpdating(true);
     try {
       const res = await fetch(API_ENDPOINTS.UPDATE.BASE, {
@@ -203,10 +194,6 @@ export default function SettingsPage() {
     } finally {
       setProxyUpdating(false);
     }
-  };
-
-  const confirmDashboardUpdate = () => {
-    setShowConfirmDashboardUpdate(true);
   };
 
   const handleDashboardUpdate = async () => {
@@ -421,8 +408,8 @@ export default function SettingsPage() {
           dashboardUpdateInfo={dashboardUpdateInfo}
           dashboardUpdateLoading={dashboardUpdateLoading}
           dashboardUpdating={dashboardUpdating}
-          onConfirmProxyUpdate={confirmProxyUpdate}
-          onConfirmDashboardUpdate={confirmDashboardUpdate}
+          onProxyUpdate={handleProxyUpdate}
+          onDashboardUpdate={handleDashboardUpdate}
           onRefreshProxyUpdate={handleRefreshProxyUpdate}
           onRefreshDashboardUpdate={handleRefreshDashboardUpdate}
         />
@@ -431,31 +418,6 @@ export default function SettingsPage() {
           <DeployDashboard />
         </div>
       </section>
-
-      <ConfirmDialog
-        isOpen={showConfirmProxyUpdate}
-        onClose={() => {
-          setShowConfirmProxyUpdate(false);
-          setPendingProxyVersion("latest");
-        }}
-        onConfirm={handleProxyUpdate}
-        title={t('confirmProxyUpdate.title')}
-        message={t('confirmProxyUpdate.message', { version: pendingProxyVersion })}
-        confirmLabel={t('confirmProxyUpdate.confirmLabel')}
-        cancelLabel={tc('cancel')}
-        variant="warning"
-      />
-
-      <ConfirmDialog
-        isOpen={showConfirmDashboardUpdate}
-        onClose={() => setShowConfirmDashboardUpdate(false)}
-        onConfirm={handleDashboardUpdate}
-        title={t('confirmDashboardUpdate.title')}
-        message={t('confirmDashboardUpdate.message')}
-        confirmLabel={t('confirmDashboardUpdate.confirmLabel')}
-        cancelLabel={tc('cancel')}
-        variant="warning"
-      />
 
       <ConfirmDialog
         isOpen={showConfirmDeleteToken}

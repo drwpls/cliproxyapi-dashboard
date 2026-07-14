@@ -87,20 +87,20 @@ describe("filterNotifications", () => {
     const notifications = [
       { id: "health-db", message: "DB down" },
       { id: "health-proxy", message: "Proxy down" },
-      { id: "update-dashboard", message: "Update available" },
+      { id: "update-proxy", message: "Update available" },
     ];
     const dismissedIds = new Set(["health-db", "health-proxy"]);
     const result = filterNotifications(notifications, dismissedIds);
     expect(result.length).toBe(1);
     const [notification] = result;
     expect(notification).toBeDefined();
-    expect(notification!.id).toBe("update-dashboard");
+    expect(notification!.id).toBe("update-proxy");
   });
 
   it("returns all notifications when dismissed set is empty", () => {
     const notifications = [
       { id: "health-db", message: "DB down" },
-      { id: "update-dashboard", message: "Update available" },
+      { id: "update-proxy", message: "Update available" },
     ];
     const result = filterNotifications(notifications, new Set());
     expect(result.length).toBe(2);
