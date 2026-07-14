@@ -3,8 +3,6 @@
 import { ToastProvider } from "@/components/ui/toast";
 import { MobileSidebarProvider } from "@/components/mobile-sidebar-context";
 import { MobileTopBar } from "@/components/mobile-top-bar";
-import { LazyUpdateNotification } from "@/components/lazy-update-notification";
-import { ProxyUpdateNotification } from "@/components/proxy-update-notification";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardNav } from "@/components/dashboard-nav";
 
@@ -25,8 +23,6 @@ export function DashboardClientLayout({ children }: DashboardClientLayoutProps) 
             </div>
           </main>
         </div>
-        <LazyUpdateNotification />
-        <ProxyUpdateNotification />
       </MobileSidebarProvider>
     </ToastProvider>
   );

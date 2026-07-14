@@ -30,8 +30,8 @@ interface ProviderSettingsProps {
   dashboardUpdateInfo: DashboardUpdateInfo | null;
   dashboardUpdateLoading: boolean;
   dashboardUpdating: boolean;
-  onConfirmProxyUpdate: (version?: string) => void;
-  onConfirmDashboardUpdate: () => void;
+  onProxyUpdate: (version?: string) => void;
+  onDashboardUpdate: () => void;
   onRefreshProxyUpdate: () => void;
   onRefreshDashboardUpdate: () => void;
 }
@@ -43,8 +43,8 @@ export function ProviderSettings({
   dashboardUpdateInfo,
   dashboardUpdateLoading,
   dashboardUpdating,
-  onConfirmProxyUpdate,
-  onConfirmDashboardUpdate,
+  onProxyUpdate,
+  onDashboardUpdate,
   onRefreshProxyUpdate,
   onRefreshDashboardUpdate,
 }: ProviderSettingsProps) {
@@ -93,7 +93,7 @@ export function ProviderSettings({
 
             <div className="flex flex-col sm:flex-row flex-wrap gap-2">
               <Button
-                onClick={() => onConfirmProxyUpdate("latest")}
+                onClick={() => onProxyUpdate("latest")}
                 disabled={proxyUpdating || !proxyUpdateInfo.updateAvailable}
               >
                 {proxyUpdating ? t('buttonUpdating') : proxyUpdateInfo.updateAvailable ? t('buttonUpdateToLatest') : t('buttonUpToDate')}
@@ -111,7 +111,7 @@ export function ProviderSettings({
                     <button
                       key={v}
                       type="button"
-                      onClick={() => onConfirmProxyUpdate(v)}
+                      onClick={() => onProxyUpdate(v)}
                       disabled={proxyUpdating}
                       className="rounded-sm border border-[var(--surface-border)] bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-50"
                     >
@@ -168,7 +168,7 @@ export function ProviderSettings({
 
               <div className="flex flex-col sm:flex-row flex-wrap gap-2">
                 <Button
-                  onClick={onConfirmDashboardUpdate}
+                  onClick={onDashboardUpdate}
                   disabled={dashboardUpdating || !dashboardUpdateInfo.updateAvailable}
                 >
                   {dashboardUpdating ? t('buttonUpdating') : dashboardUpdateInfo.updateAvailable ? t('buttonUpdateToLatest') : t('buttonUpToDate')}

@@ -47,7 +47,6 @@ export function buildNotifications(
   healthData: HealthStatus | null | undefined,
   quotaData: { accounts: readonly QuotaAccount[] } | null | undefined,
   proxyUpdateData: UpdateCheckResult | null | undefined,
-  dashUpdateData: UpdateCheckResult | null | undefined,
   t: TranslationFn,
   now: number = Date.now()
 ): Notification[] {
@@ -112,16 +111,6 @@ export function buildNotifications(
       type: "info",
       title: t("proxyUpdateTitle"),
       message: t("updateVersionMessage", { current: proxyUpdateData.currentVersion, latest: proxyUpdateData.latestVersion }),
-      link: "/dashboard/settings",
-      timestamp: now,
-    });
-  }
-  if (dashUpdateData?.updateAvailable && !dashUpdateData.buildInProgress) {
-    items.push({
-      id: "update-dashboard",
-      type: "info",
-      title: t("dashboardUpdateTitle"),
-      message: t("updateVersionMessage", { current: dashUpdateData.currentVersion, latest: dashUpdateData.latestVersion }),
       link: "/dashboard/settings",
       timestamp: now,
     });
